@@ -1,81 +1,72 @@
-MicroSocks - multithreaded, small, efficient SOCKS5 server.
-===========================================================
+# MicroSocks - 多线程、轻量、高效的 SOCKS5 服务器
+[English](README_EN.md) | 简体中文
 
-a SOCKS5 service that you can run on your remote boxes to tunnel connections
-through them, if for some reason SSH doesn't cut it for you.
+## 目录
+- [简介](#简介)
+- [特点](#特点)
+- [历史](#历史)
+- [命令行选项](#命令行选项)
+  - [一次性认证模式使用示例](#一次性认证模式使用示例)
+- [支持的 SOCKS5 特性](#支持的-socks5-特性)
+- [故障排除](#故障排除)
 
-It's very lightweight, and very light on resources too:
+## 简介
+MicroSocks 是一个可以在远程服务器上运行的 SOCKS5 服务，当 SSH 隧道无法满足你的需求时，它能提供一个完美的替代方案。
 
-for every client, a thread with a low stack size is spawned.
-the main process basically doesn't consume any resources at all.
+## 特点
+- 超轻量级设计
+  - 为每个客户端创建一个小型堆栈的线程
+  - 主进程几乎不消耗任何系统资源
+  - 资源占用仅受限于文件描述符数量和可用内存
 
-the only limits are the amount of file descriptors and the RAM.
+- 稳定可靠
+  - 优雅处理资源耗尽情况
+  - 在资源不足时，会直接拒绝新连接，而不是像其他程序那样崩溃退出
 
-It's also designed to be robust: it handles resource exhaustion
-gracefully by simply denying new connections, instead of calling abort()
-as most other programs do these days.
+- 简单易用
+  - 无需配置文件
+  - 支持命令行快速设置
+  - 大多数情况下甚至不需要任何参数就能运行
 
-another plus is ease-of-use: no config file necessary, everything can be
-done from the command line and doesn't even need any parameters for quick
-setup.
+## 历史
+这是 "rocksocks5" 的继任者，开发时考虑了以下目标：
+- 优先使用标准 libc 函数而不是自定义函数
+- 没有人为限制
+- 不追求最小二进制大小，而是追求最小源代码大小、最大可读性、可重用性和可扩展性
 
-History
--------
+得益于此，该程序支持开箱即用的 IPv4、DNS 和 IPv6，并且可以使用相同的代码。相比之下，rocksocks5 需要通过多个编译时定义来减小二进制大小，例如在仅启用 IPv4 支持时可以达到 10 KB 的极限值。
 
-This is the successor of "rocksocks5", and it was written with
-different goals in mind:
+即便如此，如果针对大小进行优化，本程序在静态链接到 musl libc 时也不到 50 KB，这在最便宜的路由器上也能轻松使用。
 
-- prefer usage of standard libc functions over homegrown ones
-- no artificial limits
-- do not aim for minimal binary size, but for minimal source code size,
-  and maximal readability, reusability, and extensibility.
+## 命令行选项
+```bash
+microsocks -1 -q -i listenip -p port -u user -P passw -b bindaddr -w wl
+```
 
-as a result of that, ipv4, dns, and ipv6 is supported out of the box
-and can use the same code, while rocksocks5 has several compile time
-defines to bring down the size of the resulting binary to extreme values
-like 10 KB static linked when only ipv4 support is enabled.
+所有参数都是可选的。默认监听 IP 为 0.0.0.0，端口为 1080。
 
-still, if optimized for size, *this* program when static linked against musl
-libc is not even 50 KB. that's easily usable even on the cheapest routers.
+- -q：禁用日志输出
+- -b：指定出站连接的绑定 IP
+- -w：设置免认证白名单，支持多个 IP，用逗号分隔
+  例如：-w 127.0.0.1,192.168.1.1,::1
+- -1：启用一次性认证模式，适用于不支持用户名密码认证的程序
 
-command line options
---------------------
+### 一次性认证模式使用示例
+使用支持认证的程序（如 curl）进行首次认证：
+```bash
+curl --socks5 user:password@listenip:port anyurl
+```
 
-    microsocks -1 -q -i listenip -p port -u user -P passw -b bindaddr -w wl
+认证成功后，该 IP 将被加入白名单，后续使用无需再次认证。
 
-all arguments are optional.
-by default listenip is 0.0.0.0 and port 1080.
+## 支持的 SOCKS5 特性
+- 认证方式：无认证、密码认证、一次性认证
+- 网络协议：IPv4、IPv6、DNS
+- 传输协议：TCP（暂不支持 UDP）
 
-- option -q disables logging.
-- option -b specifies which ip outgoing connections are bound to
-- option -w allows to specify a comma-separated whitelist of ip addresses,
-that may use the proxy without user/pass authentication.
-e.g. -w 127.0.0.1,192.168.1.1.1,::1 or just -w 10.0.0.1
-to allow access ONLY to those ips, choose an impossible to guess user/pw combo.
-- option -1 activates auth_once mode: once a specific ip address
-authed successfully with user/pass, it is added to a whitelist
-and may use the proxy without auth.
-this is handy for programs like firefox that don't support
-user/pass auth. for it to work you'd basically make one connection
-with another program that supports it, and then you can use firefox too.
-for example, authenticate once using curl:
+## 故障排除
+如果遇到程序崩溃，请尝试在 sockssrv.c 中逐步增加 `THREAD_STACK_SIZE` 的值，每次增加 4KB。
 
-    curl --socks5 user:password@listenip:port anyurl
+如果这样解决了你的问题，欢迎提交 Pull Request。
 
-
-Supported SOCKS5 Features
--------------------------
-- authentication: none, password, one-time
-- IPv4, IPv6, DNS
-- TCP (no UDP at this time)
-
-Troubleshooting
----------------
-
-if you experience segfaults, try raising the `THREAD_STACK_SIZE` in sockssrv.c
-for your platform in steps of 4KB.
-
-if this fixes your issue please file a pull request.
-
-microsocks uses the smallest safe thread stack size to minimize overall memory
-usage.
+MicroSocks 使用最小安全线程栈大小来优化内存使用，这个值可能需要根据不同平台进行调整。
